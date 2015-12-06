@@ -64,13 +64,6 @@ abstract class AsyncTask
     private static $shmId;
 
     /**
-     * The line number in which the object has been initialized
-     * @var integer
-     * @static
-     */
-    private $line;
-
-    /**
      * Creates a new asynchronous task
      * @return void
      * @access public
@@ -79,9 +72,6 @@ abstract class AsyncTask
     final public function __construct()
     {
         $error = '';
-        if (version_compare(PHP_VERSION, '5.3.3', '<') || defined('HHVM_VERSION')) {
-            $error .= "\n\e[0m\e[0;32mAsyncTask only officially supports PHP 5.3.3 and above,\e[0m";
-        }
         if (!extension_loaded('pcntl')) {
             $error .= "\n\e[0m\e[0;32mAsyncTask uses the extension \"pcntl\",\e[0m";
         }
@@ -96,10 +86,7 @@ abstract class AsyncTask
            );
         }
 
-        $line = debug_backtrace();
-        $this->line = $line[0]['line'];
-
-        self::$shmId = shm_attach((int) (ftok(__FILE__, 'A') . $this->line));
+        self::$shmId = shm_attach((int) (ftok(__FILE__, 'A')));
         shm_put_var(self::$shmId, 11511697116117115, 'PENDING');
         shm_put_var(self::$shmId, 112112105100, getmypid());
     }
@@ -113,7 +100,7 @@ abstract class AsyncTask
     final public function __destruct()
     {
         if (
-            @shm_has_var(self::$shmId, 112112105100) &&
+            shm_has_var(self::$shmId, 112112105100) &&
             shm_get_var(self::$shmId, 112112105100) == getmypid()
         ) {
             shm_remove(self::$shmId);
@@ -132,7 +119,7 @@ abstract class AsyncTask
     {
         if (
             in_array($key, array('shmId', 'pid', 'ppid', 'status')) === false &&
-            @shm_has_var(self::$shmId, self::getUid($key))
+            shm_has_var(self::$shmId, self::getUid($key))
         ) {
             return shm_get_var(self::$shmId, self::getUid($key));
         } else {
@@ -191,7 +178,7 @@ abstract class AsyncTask
         if ($pid == -1) {
             exit();
         } elseif (!$pid) {
-            self::$shmId = shm_attach((int) (ftok(__FILE__, 'A') . $this->line));
+            self::$shmId = shm_attach((int) (ftok(__FILE__, 'A')));
             shm_put_var(self::$shmId, 112105100, getmypid());
             shm_put_var(self::$shmId, 11511697116117115, 'RUNNING');
 
@@ -201,7 +188,7 @@ abstract class AsyncTask
 
             $this->onPostExecute($result);
 
-            if (@shm_has_var(self::$shmId, 112105100)) {
+            if (shm_has_var(self::$shmId, 112105100)) {
                 shm_put_var(self::$shmId, 112105100, null);
                 shm_put_var(self::$shmId, 11511697116117115, 'FINISHED');
             }
@@ -218,8 +205,7 @@ abstract class AsyncTask
     final public function cancel()
     {
         if (
-            @shm_has_var(self::$shmId, 112105100) &&
-            is_null(shm_get_var(self::$shmId, 112105100)) === false
+            shm_has_var(self::$shmId, 112105100) && is_null(shm_get_var(self::$shmId, 112105100)) === false
         ) {
             $this->onCancelled();
             posix_kill(shm_get_var(self::$shmId, 112105100), SIGKILL);
@@ -239,7 +225,7 @@ abstract class AsyncTask
      */
     final public function getStatus()
     {
-        return @shm_has_var(self::$shmId, 11511697116117115)
+        return shm_has_var(self::$shmId, 11511697116117115)
                    ? shm_get_var(self::$shmId, 11511697116117115)
                    : 'PENDING';
     }
@@ -252,7 +238,7 @@ abstract class AsyncTask
      */
     final public function isCancelled()
     {
-        return @shm_has_var(self::$shmId, 11511697116117115) == 'CANCELED' ? true : false;
+        return shm_has_var(self::$shmId, 11511697116117115) == 'CANCELED' ? true : false;
     }
 
     /**
